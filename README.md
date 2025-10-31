@@ -17,7 +17,7 @@ nb_aiopool 是 asyncio 协程池,提供多种方式实现 协程并发池。
 那你直接写 `tasks = [asyncio.create_task(make_request(url, session, semaphore)) for _ in range(10000000)]` 那就太蠢了。
 
 `make_request`虽然有 `asyncio.Semaphore(1000)` ,但是也迅速编排1000万个task，造成内存 cpu loop压力都很大，  
-而如果使用nb_aiopool 可以有序控制程序的task创建速度。
+而如果使用`nb_aiopool` ,三个pool的实现都有背压机制，你不可能for循环快速创建1000万个task，可以有序控制程序的task创建速度。
 
 ## 1.2 安装
 
@@ -358,6 +358,31 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-## 许可证
+
+## 1.7 nb_aiopool 和 async-pool-executor 区别
+
+nb_aiopool 的定位与 async-pool-executor (例如 这个库 或 funboost 内置的实现) 完全不同，它们解决了不同场景下的问题，不存在竞争关系。
+
+`nb_aiopool`  
+和以前的这两个已开发的 `async_pool_executor` 作用不同。
+
+https://github.com/ydf0509/async_pool_executor 
+https://github.com/ydf0509/funboost/blob/master/funboost/concurrent_pool/async_pool_executor.py
+
+`async_pool_executor` 是在同步环境中去 pool.submit 任务给一个loop并发运行多个coro ，   
+当一个框架需要兼容调度同步和异步并发时候用这，  
+例如`funboost`总体生态语法是同步的，需要依靠使用`async_pool_executor` 实现 `asyncio` 模式并发。 
+
+`nb_aiopool` 是 在异步环境中去 await pool.submit ，纯脆为了异步生态而生。  
+
+
+简单来说：
+*   **`async_pool_executor`：是**一座桥梁**，连接了**同步世界**和**异步世界**。**
+    *   它的工作是在一个**同步的**代码环境中，能够方便地调用并执行**异步的**函数（协程），而不用把整个应用都变成 `async/await`。
+*   **`nb_aiopool`：是一个**交通管制系统**，它**完全生活在异步世界内部**。**
+    *   它的工作是在一个**已经存在的**异步代码环境中，去管理和限制并发任务的流量，防止交通堵塞（资源耗尽）。
+
+
+## 1.100 许可证
 
 MIT

@@ -1,4 +1,5 @@
 """
+```markdown
 SmartAioPool - 智能异步线程池
 
 一个高级异步IO线程池实现，具有以下核心特性：
@@ -48,6 +49,7 @@ await pool.submit(my_async_func, arg1)  # 不需要手动等待
 3. **手动等待**：调用async_wait_for_all()方法手动等待所有任务完成
 
 注意：此类设计用于需要动态调整并发度的场景，如Web爬虫、API调用等IO密集型任务。
+```
 """
 
 import signal

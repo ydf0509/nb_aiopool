@@ -60,3 +60,10 @@ class NoQueueAioPoolUseCondition:
         """等待所有任务完成"""
         if self.tasks:
             await asyncio.gather(*self.tasks, return_exceptions=True)
+
+    async def __aenter__(self):
+        await self._ensure_started()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.wait()

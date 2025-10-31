@@ -57,4 +57,12 @@ class NoQueueAioPool:
             await asyncio.gather(*self.tasks)
 
 
+    async def __aenter__(self):
+        await self._ensure_started()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.wait()
+
+
 

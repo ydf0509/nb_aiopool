@@ -8,6 +8,11 @@ T = TypeVar("T")  # 用于标注异步函数返回类型
 _active_pools = weakref.WeakSet()
 
 class CommonAioPool:
+    """
+    CommonAioPool 是一个经典的基于 `asyncio.Queue`有界队列 的并发池。
+    它通过固定数量的后台工作协程（worker）来消费队列中的任务，实现稳定可靠的并发控制。
+    它的实现简单，性能良好，是许多场景下的首选。
+    """
     def __init__(self, max_concurrency: int = 100, max_queue_size: int = 1000):
         self._max_concurrency = max_concurrency
         self._queue: asyncio.Queue = asyncio.Queue(maxsize=max_queue_size)
