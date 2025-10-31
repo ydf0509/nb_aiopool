@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nb_aiopool"
-version = "0.3"
+version = "0.4"
 description = "即使在 asyncio 编程生态中，并发池仍然有其用武之地。nb_aiopool 提供了多种异步asyncio并发池实现，帮助开发者更好地管理并发任务。"
 authors = [
     {name = "ydf0509", email = "ydf0509@xxx.com"},
