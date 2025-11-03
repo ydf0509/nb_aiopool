@@ -16,6 +16,8 @@
 
 ## 1.1 asyncio 为什么也需要协程并发池？
 
+**第一性原理**：nb_aiopool 是不是伪需求？
+
 `nb_aiopool` 不仅要解决并发数量限制，更重要还是要解决背压(背压就是要阻止程序过快运行，一股脑快速创建1000万个asyncio.Task) , 不是你以为的只要在你函数加个 `asyncio.Semaphore`  就等同于 `nb_aiopool` 功能了。
 
 
@@ -24,7 +26,7 @@
 但是asyncio生态如果要设置并发数量，需要入侵去源函数加 `asyncio.Semaphore(1000)` 来控制并发数量，这不好。
 
 而且 例子1.6的 1000并发压测web 1000万次举例，你如果不用 asyncio 并发池，
-那你直接写 `tasks = [asyncio.create_task(make_request(url, session, semaphore)) for _ in range(10000000)]` 那就太蠢了。
+那你直接写 `tasks = [asyncio.create_task(make_request(url, session, semaphore)) for _ in range(10000000)]` 那就太蠢了，电脑会在30秒内死机重启。
 
 `make_request`虽然有 `asyncio.Semaphore(1000)` ,但是也迅速编排1000万个task，造成内存 cpu loop压力都很大，  
 而如果使用`nb_aiopool` ,三个pool的实现都有背压机制，你不可能for循环快速创建1000万个task，可以有序控制程序的task创建速度。
@@ -351,7 +353,8 @@ async def make_request(url, session, semaphore):
     async with semaphore: # 使用 Semaphore 控制并发数量
         try:
             async with session.get(url) as response:
-                await response.read()
+                text = await response.read()
+                return text 
         except:
             pass
 
@@ -443,7 +446,7 @@ async def pool_main():
     pool = CommonAioPool(max_concurrency=1000)
     for i in range(1000000): 
          # 只要你别保存100万futures到列表，内存就很小。使用 nb_aiopool 好处是不需要你手动 await asyncio.gather，所以不需要保存一个futures列表
-        await pool.submit(aio_task(f"{'task' * 100}_{i}"))
+        await pool.submit(aio_task(f"{'task' * 100}_{i}")) # 这行不会超高速一股脑submit 100万任务，会因为背压而阻塞
     # futures = [await pool.submit(aio_task(f"{'task' * 100}_{i}")) for i in range(1000000)] #  这样保存100万 futures 内存才大，nb_aiopool 不需要用户等待futures完成.
 
     await shutdown_all_common_aiopools()

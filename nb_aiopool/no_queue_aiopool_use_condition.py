@@ -1,12 +1,16 @@
 import asyncio
 from typing import Awaitable, Optional, Set
 
+import weakref
+
+_active_pools = weakref.WeakSet()
 
 class NoQueueAioPoolUseCondition:
     def __init__(self, max_concurrency: int):
         self.max_concurrency = max_concurrency
         self.tasks: Set[asyncio.Task] = set()
         self._condition = asyncio.Condition()  # 条件变量：自带锁 + 等待/通知机制
+        _active_pools.add(self)
 
     async def submit(self, coro: Awaitable, future: Optional[asyncio.Future] = None) -> asyncio.Future:
         """
@@ -62,8 +66,13 @@ class NoQueueAioPoolUseCondition:
             await asyncio.gather(*self.tasks, return_exceptions=True)
 
     async def __aenter__(self):
-        await self._ensure_started()
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
         await self.wait()
+
+
+async def wait_all_no_queue_aiopools_use_condition():
+    for pool in _active_pools:
+        await pool.wait()
+    _active_pools.clear()

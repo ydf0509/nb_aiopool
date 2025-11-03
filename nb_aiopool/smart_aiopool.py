@@ -446,6 +446,10 @@ def smart_run(coro, *, debug=False):
     
     return asyncio.run(wrapper(), debug=debug)
 
+async def shutdown_all_smart_aiopools():
+    for pool in list(_active_pools):
+        await pool.shutdown(wait=True)
+    _active_pools.clear()
 
 if __name__ == "__main__":
     # ======================

@@ -1,6 +1,8 @@
 import asyncio
 from typing import Awaitable, Optional, Set
+import weakref
 
+_active_pools = weakref.WeakSet()
 
 class NoQueueAioPool:
     """
@@ -11,10 +13,10 @@ class NoQueueAioPool:
     def __init__(self, max_concurrency: int):
         self.max_concurrency = max_concurrency
         self.tasks: Set[asyncio.Task] = set()
-
+        self.semaphore = asyncio.Semaphore(max_concurrency)
+        _active_pools.add(self)
     async def submit(self, coro: Awaitable, future: Optional[asyncio.Future] = None) -> asyncio.Future:
         """
-        提交任务
         - coro: 要执行的协程
         - future: 外部传入 future，否则内部创建
         - 返回 future
@@ -32,13 +34,19 @@ class NoQueueAioPool:
                 if not future.done():
                     future.set_exception(e)
 
-        # 背压：任务满时让出事件循环给 worker 执行
-        while len(self.tasks) >= self.max_concurrency:
-            await asyncio.sleep(0.01)
+        # # 背压：任务满时让出事件循环给 worker 执行
+        # while len(self.tasks) >= self.max_concurrency:
+        #     await asyncio.sleep(0.01)
 
+        await self.semaphore.acquire()
         task = asyncio.create_task(wrapper())
         self.tasks.add(task)
-        task.add_done_callback(self.tasks.discard)
+
+        def _on_done(t):
+            self.tasks.discard(t)
+            self.semaphore.release()
+
+        task.add_done_callback(_on_done)
 
         return future
 
@@ -49,16 +57,16 @@ class NoQueueAioPool:
         :param future: 可选的外部 Future 对象
         :return: 协程执行结果
         """
-        return await self.submit(coro, future=future)
+        fut = await self.submit(coro, future=future)
+        return await fut
 
     async def wait(self):
         """等待所有任务完成"""
         if self.tasks:
-            await asyncio.gather(*self.tasks)
+            await asyncio.gather(*self.tasks,return_exceptions=True)
 
 
     async def __aenter__(self):
-        await self._ensure_started()
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
@@ -66,3 +74,7 @@ class NoQueueAioPool:
 
 
 
+async def wait_all_no_queue_aiopools():
+    for pool in _active_pools:
+        await pool.wait()
+    _active_pools.clear()
