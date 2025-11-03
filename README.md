@@ -1,13 +1,23 @@
 # 1 nb_aiopool - 异步IO并发池
 
-nb_aiopool 是 asyncio 协程池,提供多种方式实现 协程并发池。
+`nb_aiopool` 是 `asyncio` 协程池,提供多种方式实现 协程并发池。  
+`nb_aiopool` 不仅是限制并发数量，更重要是有背压机制，内存和cpu占用稳定性超一流，吊打 你写 `asyncio.Semaphore` 这种愚蠢代码好几条街（具体看1.7例子）。
 
 包括：
-- SmartAioPool：高级智能并发池
+- SmartAioPool：高级智能并发池 (无需用户手动等待await pool.submit 返回的future对象执行完成，程序退出前会自动等待所有任务完成)
 - CommonAioPool：普通并发池
 - NoQueueAioPool：无队列并发池
 
+**asyncio并发池选择:**  
+- 如果用户是 `asyncio.run($异步入口函数)`,更推荐使用 `CommonAioPool` ，然后用户在 `$异步入库函数` 的代码最末尾一定要记得加上 `await shutdown_all_common_aiopools`  
+
+- 如果用户是 `loop.runforever()` ,则完全不需要使用 `SmartAioPool`,因为 `SmartAioPool` 就是为了黑科技方式解决， 用户忘记 等待所有futures和tasks执行完成，而程序提前结束，导致严重的丢任务。
+
+
 ## 1.1 asyncio 为什么也需要协程并发池？
+
+`nb_aiopool` 不仅要解决并发数量限制，更重要还是要解决背压(背压就是要阻止程序过快运行，一股脑快速创建1000万个asyncio.Task) , 不是你以为的只要在你函数加个 `asyncio.Semaphore`  就等同于 `nb_aiopool` 功能了。
+
 
 通常情况下 asyncio 生态不需要使用并发池，创建一个协程比线程成本低太多，所以aio并发池不流行，也没内置去实现，没有同步编程中线程池那么刚需。
 
@@ -18,6 +28,12 @@ nb_aiopool 是 asyncio 协程池,提供多种方式实现 协程并发池。
 
 `make_request`虽然有 `asyncio.Semaphore(1000)` ,但是也迅速编排1000万个task，造成内存 cpu loop压力都很大，  
 而如果使用`nb_aiopool` ,三个pool的实现都有背压机制，你不可能for循环快速创建1000万个task，可以有序控制程序的task创建速度。
+
+### 1.1.b nb_aiopool 和 python 3.11+ 的 asyncio.TaskGroup 区别？？
+
+- 第一： `nb_aiopool` 只需要 python3.6+ 就可以了，`asyncio.TaskGroup` 在python3.6-3.10 的用户使用不了。
+- 第二： 即使用户使用的是 python3.11+ , `asyncio.TaskGroup` 主要是async with 来创建，在函数局部内创建和自动销毁，一般不设计成跨模块夸函数来全局使用。
+
 
 ## 1.2 安装
 
@@ -143,7 +159,7 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from nb_aiopool import CommonAioPool
+from nb_aiopool import CommonAioPool, shutdown_all_common_aiopools
 
 async def sample_task(x):
     await asyncio.sleep(0.1)
@@ -159,12 +175,16 @@ async def main():
 
         # 2. 使用 submit 批量提交任务，返回 future 对象
         futures = [await pool.submit(sample_task(i)) for i in range(10)]
-        
-        # 等待所有任务完成
+        # 等待所有任务完成，如果你只管发后不管，不用等待futures，async with创建的pool 会自动 shutdown 等待所有任务完成
         results = await asyncio.gather(*futures)
         print(f"Batch results: {results}")
 
-    # 如果不使用 async with，则需要手动调用 pool.shutdown() 来确保所有任务完成
+    # 如果不使用 async with，则需要手动调用 shutdown_all_common_aiopools 来确保所有任务完成
+    pool = CommonAioPool(max_concurrency=5, max_queue_size=100)
+    await pool.submit(sample_task(100))
+    await pool.submit(sample_task(101))
+    await pool.submit(sample_task(102))
+    await shutdown_all_common_aiopools() # 这一行切记不能少，要放在异步函数最后一行，否则 100 101 102 压根就不会被执行和打印。
 
 asyncio.run(main())
 ```
@@ -358,8 +378,85 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
+## 1.7 演示 nb_aiopool 的稳定性 吊打单纯的 asyncio.Semaphore 几条街
 
-## 1.7 nb_aiopool 和 async-pool-executor 区别
+`nb_aiopool` 不光是解决并发数量限制，最重要是有背压机制，内存和cpu占用稳定性超一流。   
+`asyncio.Semaphore` 没有背压机制，快速创建100万tasks，内存和cpu占用超高，直接宕机。如果代码写不好，就需要你高价买10Tb内存和10000核cpu的服务器才能顶得住。
+
+如果不封装成 `nb_aiopool` ，你想每次为了临时解决背压，要重复写很多高难度代码。
+
+```python
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+
+"""
+此代码证明 nb_aiopool 的必要性，证明异步并发池不是伪需求
+
+演示无背压和有背压的的情况下，执行100万个非常简单的sleep任务，占用内存和cpu情况
+
+通过ps_util包封装的 thread_show_process_cpu_usage(1) 和 thread_show_process_memory_usage(1) 每秒打印当前进程占用的cpu和内存情况。
+
+如果采用 no_pool_main + aio_task_use_semaphore ，电脑长时间 100% cpu，演示到中途，内存占用迅速飙到10GB导致电脑死机。有些人还以为 async with semaphore 就万事大吉了呢。
+如果采用 pool_main + aio_task ，电脑 cpu 使用率 1% ，内存持续稳定在 43M。
+
+pool_main 里面用nb_aiopool 因为有背压，内存和cpu占用稳定性超一流，
+no_pool_main 里面用 asyncio.Semaphore 没有背压，电脑直接挂掉死机，卡的你连鼠标键盘都无法使用，系统就崩溃死机了。
+"""
+
+"""
+试想一下，如果你异步函数入参和返回值是更大的对象，如果这个对象的内存占用更大一些，
+并且需要创建10000万个tasks，如果你任然还是 no_pool_main 方式写代码，你需要购买阿里云10TB内存的服务器才能顶得住。
+"""
+
+import asyncio
+from nb_aiopool import CommonAioPool,shutdown_all_common_aiopools
+from nb_libs.system_monitoring import thread_show_process_cpu_usage,thread_show_process_memory_usage
+
+
+
+async def aio_task_use_semaphore(strx,semaphore):
+    async with semaphore:
+        await asyncio.sleep(5)
+        print(strx)
+        return strx
+
+async def aio_task(strx):
+    await asyncio.sleep(5)
+    print(strx)
+    return strx
+   
+async def no_pool_main(): 
+    # 极端愚蠢的做法：直接创建1000万个任务
+    print("正在创建100万个任务...")
+
+    semaphore = asyncio.Semaphore(1000)
+    
+    # 极端愚蠢，瞬间创建1000万个任务，导致内存激增，loop cpu压力也大
+    tasks = [asyncio.create_task(aio_task_use_semaphore(f"{'task' * 100}_{i}",semaphore)) for i in range(1000000)]  # 这个tasks列表内存占用已经很大了
+    # 执行所有请求
+    print("开始执行aio_task任务...")
+    await asyncio.gather(*tasks) # 如果你不使用 asyncio.gather(*tasks) 等待所有任务完成，程序会迅速提前退出，压根不会打印100万次任务代码就已经结束了。
+    print("执行aio_task任务完成")
+
+async def pool_main():
+    pool = CommonAioPool(max_concurrency=1000)
+    for i in range(1000000): 
+         # 只要你别保存100万futures到列表，内存就很小。使用 nb_aiopool 好处是不需要你手动 await asyncio.gather，所以不需要保存一个futures列表
+        await pool.submit(aio_task(f"{'task' * 100}_{i}"))
+    # futures = [await pool.submit(aio_task(f"{'task' * 100}_{i}")) for i in range(1000000)] #  这样保存100万 futures 内存才大，nb_aiopool 不需要用户等待futures完成.
+
+    await shutdown_all_common_aiopools()
+
+
+if __name__ == "__main__":
+    thread_show_process_cpu_usage(1)
+    thread_show_process_memory_usage(1)
+    # asyncio.run(no_pool_main())
+    asyncio.run(pool_main())
+```
+
+## 1.8 nb_aiopool 和 async-pool-executor 区别
 
 nb_aiopool 的定位与 async-pool-executor (例如 这个库 或 funboost 内置的实现) 完全不同，它们解决了不同场景下的问题，不存在竞争关系。
 
