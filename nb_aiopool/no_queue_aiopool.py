@@ -15,6 +15,7 @@ class NoQueueAioPool:
         self.tasks: Set[asyncio.Task] = set()
         self.semaphore = asyncio.Semaphore(max_concurrency)
         _active_pools.add(self)
+        
     async def submit(self, coro: Awaitable, future: Optional[asyncio.Future] = None) -> asyncio.Future:
         """
         - coro: 要执行的协程
