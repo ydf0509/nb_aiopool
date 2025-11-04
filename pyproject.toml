@@ -4,8 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nb_aiopool"
-version = "0.7"
-description = "即使在 asyncio 编程生态中，并发池仍然有其用武之地。nb_aiopool 提供了多种异步asyncio并发池实现，帮助开发者更好地管理并发任务。"
+version = "0.8"
+description = "即使在 asyncio 编程生态中，并发池仍然有其用武之地。nb_aiopool 提供并发限制和背压机制"
+keywords = ["asyncio", "pool", "concurrency", "task", "async","asyncio-pool", "asyncio-concurrency", "asyncio-task", "asyncio-concurrent", "asyncio-pool-concurrency", "asyncio-pool-task", "asyncio-pool-concurrent"]
 authors = [
     {name = "ydf0509", email = "ydf0509@xxx.com"},
 ]

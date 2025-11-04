@@ -35,17 +35,17 @@ class NoQueueAioPool:
                 if not future.done():
                     future.set_exception(e)
 
-        # # 背压：任务满时让出事件循环给 worker 执行
-        # while len(self.tasks) >= self.max_concurrency:
-        #     await asyncio.sleep(0.01)
+        # 背压：任务满时让出事件循环给 worker 执行
+        while len(self.tasks) >= self.max_concurrency:
+            await asyncio.sleep(0.01)
 
-        await self.semaphore.acquire()
+        # await self.semaphore.acquire()
         task = asyncio.create_task(wrapper())
         self.tasks.add(task)
 
         def _on_done(t):
             self.tasks.discard(t)
-            self.semaphore.release()
+            # self.semaphore.release()
 
         task.add_done_callback(_on_done)
 

@@ -17,20 +17,20 @@ no_pool_main 里面用 asyncio.Semaphore 没有背压，电脑直接挂掉死机
 """
 
 import asyncio
-from nb_aiopool import CommonAioPool,shutdown_all_common_aiopools
+from nb_aiopool import NbAioPool
 from nb_libs.system_monitoring import thread_show_process_cpu_usage,thread_show_process_memory_usage
 
 
 
-async def aio_task_use_semaphore(strx,semaphore):
+async def aio_task_use_semaphore(strx,n,semaphore):
     async with semaphore:
         await asyncio.sleep(5)
-        print(strx)
+        print(n)
         return strx
 
-async def aio_task(strx):
+async def aio_task(strx,n):
     await asyncio.sleep(5)
-    print(strx)
+    print(n)
     return strx
    
 async def no_pool_main(): 
@@ -40,19 +40,19 @@ async def no_pool_main():
     semaphore = asyncio.Semaphore(1000)
     
     # 极端愚蠢，瞬间创建1000万个任务，导致内存激增，loop cpu压力也大
-    tasks = [asyncio.create_task(aio_task_use_semaphore(f"{'task' * 100}_{i}",semaphore)) for i in range(1000000)] 
+    tasks = [asyncio.create_task(aio_task_use_semaphore(f"{'task' * 100}_{i}",i,semaphore)) for i in range(1000000)] 
     # 执行所有请求
     print("开始执行aio_task任务...")
     await asyncio.gather(*tasks)
     print("执行aio_task任务完成")
 
 async def pool_main():
-    pool = CommonAioPool(max_concurrency=1000)
-    for i in range(1000000): 
-        await pool.submit(aio_task(f"{'task' * 100}_{i}")) # 只要你别保存100万futures到列表，内存就很小。
-    # futures = [await pool.submit(aio_task(f"{'task' * 100}_{i}")) for i in range(1000000)] #  这样保存100万 futures 内存才大，nb_aiopool 不需要用户等待futures完成.
+    async with NbAioPool(max_concurrency=1000) as pool:
+        for i in range(1000000): 
+            await pool.submit(aio_task(f"{'task' * 100}_{i}",i)) # 只要你别保存100万futures到列表，内存就很小。
+            # futures = [await pool.submit(aio_task(f"{'task' * 100}_{i}",i)) for i in range(1000000)] #  这样保存100万 futures 内存才大，nb_aiopool 不需要用户等待futures完成.
 
-    await shutdown_all_common_aiopools()
+
 
 
 if __name__ == "__main__":
