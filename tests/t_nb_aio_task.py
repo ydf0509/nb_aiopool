@@ -16,25 +16,6 @@ async def my_fun2(a):
     print(f"my_fun2: {a}")
     return a * 2
 
-async def producer():
-    # 提交任务到 Redis 队列
-    await my_fun1.submit(1, 2)
-    await my_fun1.submit(10, 20)
-    await my_fun1.submit(100, 200)
-    # 查看队列大小
-    print(f"队列大小: {await my_fun1.get_queue_size()}")
-
-
-### 3. 消费任务（消费者）
-async def consumer():
-    
-
-    # 方式1：单独启动消费者
-    # await my_fun1.consume()
-    
-    # 方式2：批量启动多个消费者 ⭐ 推荐
-    await batch_consume([my_fun1, my_fun2])
-
 
 ### 4. 完整示例
 async def main():
@@ -49,6 +30,4 @@ async def main():
     await batch_consume([my_fun1, my_fun2])
 
 if __name__ == "__main__":
-    # 方式1：使用 asyncio.run（任务执行完会退出）
-
     asyncio.run(main())
