@@ -34,9 +34,9 @@ class AioTask:
         self,
         func: Callable,
         queue_name: str,
-        max_concurrency: int = 50,
+        max_concurrency: int = 100,
         redis_url: str = "redis://localhost:6379/0",
-        max_queue_size: int = 1000,
+        max_queue_size: int = 100, # NbAioPool 的 asyncio.Queue 内存工作队列大小，不是指redis list的最大长度限制。
         use_pickle: bool = True,
     ):
         """

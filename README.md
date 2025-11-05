@@ -1,6 +1,7 @@
 # nb_aiopool - asyncio 协程并发池
 
 `nb_aiopool` 是一个轻量级、高性能的 `asyncio` 协程并发池，专为异步编程场景设计。
+`nb_aiopool` 附赠一套分布式asyncio异步任务队列框架 `nb_aio_task` ，用来演示如何使用 `nb_aiopool` 实现`asyncio`生态的分布式异步任务队列框架，
 
 **核心价值：**
 - ✅ **背压控制**：防止瞬间创建海量 Task，避免内存和 CPU 失控
@@ -13,6 +14,10 @@
 当每个Task携带大字符串参数（如 `f"{'task' * 100}_{i}"`）和返回值时：
 - ❌ `asyncio.Semaphore`：100万Task × 1.6KB = **10GB+内存** → 💥 电脑死机
 - ✅ `NbAioPool`：背压保护，内存稳定在 **43MB** → ✨ 丝滑流畅
+
+**为什么强调背压机制？：**
+假设你使用 `asyncio.create_task(process_message(message))` 消费 `redis/rabbitmq/kafka` 消息队列，如果消息队列有1亿消息，如果没有背压机制，会迅速掏空消息队列里面的1亿消息到程序内存中，严重的内存泄漏迅速宕机和负载不均衡。
+
 
 ## 目录
 
@@ -878,9 +883,65 @@ https://github.com/ydf0509/funboost/blob/master/funboost/concurrent_pool/async_p
 
 - `nb_aio_task` 的教程见 `nb_aiopool/contrib/README.md` ,例子见 `nb_aiopool/contrib/example.py`
 
-- `funboost` + 支持所有并发模式(包括asyncio) 是更强力的万能函数调度框架，`nb_aio_task` 是用来演示如何使用 `nb_aiopool` 实现分布式异步任务队列框架，
-  证明`nb_aiopool` 是可以作为任何异步框架的基石存在。
+- `funboost` + 支持所有并发模式(包括asyncio) 是更强力的万能函数调度框架，`nb_aio_task` 是用来演示如何使用 `nb_aiopool` 实现`asyncio`生态的分布式异步任务队列框架，
+  证明`nb_aiopool` 是可以作为任何`asyncio`生态框架的基石存在。
 
 
+- `nb_aio_task`  使用例子
+```python
+
+import asyncio
+from nb_aiopool.contrib import aio_task, batch_consume
+
+@aio_task(queue_name="my_queue1", max_concurrency=100)
+async def my_fun1(x, y):
+    await asyncio.sleep(1)
+    print(f"my_fun1: {x}, {y}")
+    return x + y
+
+@aio_task(queue_name="my_queue2", max_concurrency=50)
+async def my_fun2(a):
+    await asyncio.sleep(1)
+    print(f"my_fun2: {a}")
+    return a * 2
+
+async def producer():
+    # 提交任务到 Redis 队列
+    await my_fun1.submit(1, 2)
+    await my_fun1.submit(10, 20)
+    await my_fun2.submit(3)
+    
+    # 查看队列大小
+    print(f"队列大小: {await my_fun1.get_queue_size()}")
+
+
+### 3. 消费任务（消费者）
+async def consumer():
+    
+
+    # 方式1：单独启动消费者
+    # await my_fun1.consume()
+    
+    # 方式2：批量启动多个消费者 ⭐ 推荐
+    await batch_consume([my_fun1, my_fun2])
+
+
+### 4. 完整示例
+async def main():
+    # 任然可以直接运行函数，但不会进入队列
+    print(f"直接运行函数: {await my_fun1(1,2)}")
+    
+    # 提交任务
+    for i in range(100):
+        await my_fun1.submit(i, i+1)
+    
+    # 启动消费者（阻塞运行）
+    await batch_consume([my_fun1, my_fun2])
+
+if __name__ == "__main__":
+    # 方式1：使用 asyncio.run（任务执行完会退出）
+
+    asyncio.run(main())
+```
 
 
