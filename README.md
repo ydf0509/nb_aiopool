@@ -270,21 +270,114 @@ async def example_run():
             print(f"第 {i} 个任务结果: {result}")
 ```
 
-### 4.3 对比总结
+### 4.3 `pool.batch_submit(coros)` - 批量提交任务 🆕
+
+**特点：**
+- ✅ 批量操作：一次性提交多个协程，无需循环
+- ✅ 代码简洁：比列表推导式更清晰
+- ✅ 返回 Future 列表：可以灵活控制等待时机
+
+**使用场景：** 需要批量提交大量任务，后续统一收集结果
 
 ```python
-# submit: 快速提交，稍后等待
-future = await pool.submit(my_task(5))
-# ... 可以做其他事情 ...
-result = await future  # 需要时再等待
+async def example_batch_submit():
+    async with NbAioPool(max_concurrency=10) as pool:
+        # 创建100个协程对象
+        coros = [my_task(i) for i in range(100)]
+        
+        # 批量提交，返回 future 列表
+        futures = await pool.batch_submit(coros)
+        
+        # 可以先做其他事情
+        print(f"已批量提交 {len(futures)} 个任务")
+        
+        # 统一等待所有任务完成
+        results = await asyncio.gather(*futures)
+        print(f"结果: {results}")
+```
 
-# run: 提交并立即等待（等价于上面两行）
-result = await pool.run(my_task(5))
+**对比传统方式：**
+
+```python
+# 传统方式：列表推导式 + submit
+futures = [await pool.submit(my_task(i)) for i in range(100)]
+
+# 批量方式：更简洁 ✅
+coros = [my_task(i) for i in range(100)]
+futures = await pool.batch_submit(coros)
+```
+
+### 4.4 `pool.batch_run(coros)` - 批量提交并等待结果 🆕
+
+**特点：**
+- ✅ 一步到位：批量提交并直接返回所有结果
+- ✅ 极简代码：相当于 `await pool.batch_submit(coros)` + `await asyncio.gather(*futures)`
+- ⚠️ 阻塞当前协程：会等待所有任务完成
+
+**使用场景：** 批量执行任务并立即需要所有结果
+
+```python
+async def example_batch_run():
+    async with NbAioPool(max_concurrency=10) as pool:
+        # 创建100个协程对象
+        coros = [my_task(i) for i in range(100)]
+        
+        # 批量提交并等待所有结果（一步到位）
+        results = await pool.batch_run(coros)
+        print(f"结果: {results}")
+        print(f"共完成 {len(results)} 个任务")
+```
+
+**对比传统方式：**
+
+```python
+# 传统方式：3行代码
+coros = [my_task(i) for i in range(100)]
+futures = await pool.batch_submit(coros)
+results = await asyncio.gather(*futures)
+
+# 批量方式：2行代码 ✅
+coros = [my_task(i) for i in range(100)]
+results = await pool.batch_run(coros)
+```
+
+### 4.5 四种方法对比总结
+
+| 方法 | 提交方式 | 返回值 | 是否等待 | 适用场景 |
+|------|----------|--------|----------|----------|
+| `submit(coro)` | 单个 | Future | ❌ | 逐个提交，灵活控制 |
+| `run(coro)` | 单个 | 结果 | ✅ | 逐个执行，立即使用结果 |
+| `batch_submit(coros)` | 批量 | Future列表 | ❌ | 批量提交，统一收集 |
+| `batch_run(coros)` | 批量 | 结果列表 | ✅ | 批量执行，立即获取结果 |
+
+**代码示例对比：**
+
+```python
+# 方式1: submit - 逐个提交，手动等待
+future1 = await pool.submit(my_task(1))
+future2 = await pool.submit(my_task(2))
+result1 = await future1
+result2 = await future2
+
+# 方式2: run - 逐个执行，立即获取结果
+result1 = await pool.run(my_task(1))
+result2 = await pool.run(my_task(2))
+
+# 方式3: batch_submit - 批量提交，手动等待
+coros = [my_task(1), my_task(2)]
+futures = await pool.batch_submit(coros)
+results = await asyncio.gather(*futures)
+
+# 方式4: batch_run - 批量执行，一步到位 ✅ 最简洁
+coros = [my_task(1), my_task(2)]
+results = await pool.batch_run(coros)
 ```
 
 **选择建议：**
-- 批量并发任务 → 用 `submit` + `asyncio.gather`
-- 顺序执行任务 → 用 `run`
+- 少量任务，逐个执行 → 用 `run`
+- 少量任务，并发执行 → 用 `submit` + 手动 gather
+- 大量任务，需要灵活控制 → 用 `batch_submit` （我说的大量也不能是那种几百万个coro一次batch_submit，几百个次batch_submit还行，因为coros列表和futures列表太大，内存太大；如果真的是几百万个coro需要运行，那就使用for循环逐个submit提交，使用发后不管的模式，不gather futures的模式）
+- 大量任务，一步到位 → 用 `batch_run` ⭐ **最推荐**
 
 ---
 
@@ -308,22 +401,33 @@ async def sample_task(x: int):
 async def main():
     # 推荐：使用 async with，自动处理资源释放
     async with NbAioPool(max_concurrency=10, max_queue_size=1000) as pool:
-        # 方式1: submit 批量提交
+        # 方式1: submit 逐个提交
         futures = [await pool.submit(sample_task(i)) for i in range(100)]
         results = await asyncio.gather(*futures)
-        print("结果:", results)
+        print("方式1结果:", results)
         
         # 方式2: run 逐个执行
         for i in range(10):
             result = await pool.run(sample_task(i))
             print(f"任务 {i} 结果: {result}")
+        
+        # 方式3: batch_submit 批量提交 🆕
+        coros = [sample_task(i) for i in range(100)]
+        futures = await pool.batch_submit(coros)
+        results = await asyncio.gather(*futures)
+        print("方式3结果:", results)
+        
+        # 方式4: batch_run 批量执行（最简洁）🆕 ⭐
+        coros = [sample_task(i) for i in range(100)]
+        results = await pool.batch_run(coros)
+        print("方式4结果:", results)
     
     # async with 退出时自动调用 pool.shutdown(wait=True)
 
 asyncio.run(main())
 ```
 
-#### 5.1.2 手动管理生命周期
+#### 5.1.2 手动管理生命周期（不推荐手动await pool.shutdown）
 
 ```python
 async def main():
@@ -342,7 +446,7 @@ asyncio.run(main())
 
 ### 5.2 全局变量用法
 
-适用于需要跨模块、跨函数共享 pool 的场景，或使用 `loop.run_forever()` 的应用。
+适用于需要跨模块、跨函数共享 pool 的场景，这要求代码最最末尾的那一行必须是 `loop.run_forever()` 的应用。
 
 **完整示例：** 参考 `tests/t_global_nb_aiopool.py`
 
@@ -372,10 +476,9 @@ async def main():
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    loop.create_task(main())
     
-    # ⚠️ 关键：使用 run_forever() 时必须加这行
-    # 否则任务会因为程序提前退出而丢失
+    # ⚠️ 关键：使用 全局变量pool 时必须加这行，否则任务会因为程序提前退出而丢失
     loop.run_forever()
 ```
 
@@ -603,6 +706,39 @@ async def run(self, coro: Coroutine, block: bool = True) -> Any:
         result = await pool.run(my_task(10))
     """
 
+async def batch_submit(self, coros: List[Coroutine], block: bool = True) -> List[asyncio.Future]:
+    """
+    批量提交任务，返回 Future 列表 🆕
+    
+    参数:
+        coros: 协程对象列表
+        block: 队列满时是否阻塞等待
+    
+    返回:
+        asyncio.Future 对象列表
+    
+    示例:
+        coros = [my_task(i) for i in range(100)]
+        futures = await pool.batch_submit(coros)
+        results = await asyncio.gather(*futures)
+    """
+
+async def batch_run(self, coros: List[Coroutine], block: bool = True) -> List[Any]:
+    """
+    批量提交任务并等待所有结果 🆕
+    
+    参数:
+        coros: 协程对象列表
+        block: 队列满时是否阻塞等待
+    
+    返回:
+        所有任务的执行结果列表
+    
+    示例:
+        coros = [my_task(i) for i in range(100)]
+        results = await pool.batch_run(coros)  # 一步到位
+    """
+
 async def shutdown(self, wait: bool = True):
     """
     关闭池
@@ -639,7 +775,16 @@ async with NbAioPool(max_concurrency=100) as pool:
 # 3. 队列大小设置
 # max_queue_size 应该 >= max_concurrency * 10
 
-# 4. 批量任务用 submit + gather
+# 4. 批量任务优先使用 batch_run（最简洁）🆕 ⭐
+coros = [task(i) for i in range(1000)]
+results = await pool.batch_run(coros)  # 一步到位
+
+# 或使用 batch_submit（需要灵活控制时）
+coros = [task(i) for i in range(1000)]
+futures = await pool.batch_submit(coros)
+results = await asyncio.gather(*futures)
+
+# 传统方式（不推荐，代码冗长）
 futures = [await pool.submit(task(i)) for i in range(1000)]
 results = await asyncio.gather(*futures)
 ```
@@ -648,7 +793,23 @@ results = await asyncio.gather(*futures)
 
 ## 10. 常见问题
 
+### Q1: `batch_submit` 和 `batch_run` 有什么区别？
 
+```python
+# batch_submit: 批量提交，返回 future 列表，需要手动等待
+coros = [my_task(i) for i in range(100)]
+futures = await pool.batch_submit(coros)
+# 可以做其他事情...
+results = await asyncio.gather(*futures)
+
+# batch_run: 批量提交并自动等待，一步到位 ⭐ 推荐
+coros = [my_task(i) for i in range(100)]
+results = await pool.batch_run(coros)  # 直接得到结果
+```
+
+**建议：** 
+- 大多数场景用 `batch_run`，代码最简洁
+- 需要在等待前做其他操作时用 `batch_submit`
 
 ### Q2: `async with` 和手动 `shutdown` 有什么区别？
 
@@ -708,6 +869,17 @@ https://github.com/ydf0509/funboost/blob/master/funboost/concurrent_pool/async_p
 - **PyPI:** https://pypi.org/project/nb-aiopool/
 - **作者:** ydf0509
 
+
+## 13 nb_aiopool 贡献赠送一套分布式异步函数执行框架 nb_aio_task
+
+- `nb_aio_task` 框架是一个基于 `Redis` + `NbAioPool` 的简易分布式asyncio生态的异步任务队列，类似 `RQ/Celery/Funboost`，但更简单，更纯粹(只为异步而生)。
+
+- `nb_aio_task` 基于 `异步redis包(aioredis/redis[asyncio])` 作为 `broker`，使用 `NbAioPool` 作为并发控制和背压机制。
+
+- `nb_aio_task` 的教程见 `nb_aiopool/contrib/README.md` ,例子见 `nb_aiopool/contrib/example.py`
+
+- `funboost` + 支持所有并发模式(包括asyncio) 是更强力的万能函数调度框架，`nb_aio_task` 是用来演示如何使用 `nb_aiopool` 实现分布式异步任务队列框架，
+  证明`nb_aiopool` 是可以作为任何异步框架的基石存在。
 
 
 

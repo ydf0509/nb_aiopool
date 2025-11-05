@@ -21,8 +21,7 @@ async def main2():
     async with NbAioPool(max_concurrency=10, max_queue_size=1000) as pool:
         for i in range(100):
             await pool.submit(sample_task(i))  # 这样不阻塞当前for循环，是丢到queue队列后不管
-            await (await pool.submit(sample_task(i)))  # 这样是直接得到异步函数的执行结果，阻塞当前for循环
-            await pool.run(sample_task(i))  # 和上面 await (await pool.submit(sample_task(i))) 等价。
+           
 
 
 async def main3():
@@ -33,8 +32,29 @@ async def main3():
             await (await pool.submit(sample_task(i)))  # 这样是直接得到异步函数的执行结果，阻塞当前for循环
 
 
+async def main_batch_submit():
+    async with NbAioPool(max_concurrency=10, max_queue_size=1000) as pool:
+        coros = [sample_task(i) for i in range(100)]
+        futures = await pool.batch_submit(coros)
+        results = await asyncio.gather(*futures)
+        print(results, len(results),len(futures))
+
+async def main_batch_run():
+    async with NbAioPool(max_concurrency=10, max_queue_size=1000) as pool:
+        coros = [sample_task(i) for i in range(100)]
+        results = await pool.batch_run(coros)
+        print(results,len(results),len(coros))
+
 if __name__ == "__main__":
-    asyncio.run(main1())
-    asyncio.run(main2())
-    asyncio.run(main3())
-            
+    import nb_log
+
+    # asyncio.run(main1())
+    # asyncio.run(main2())
+    # asyncio.run(main3())
+    
+    # asyncio.run(main_batch_submit())
+    asyncio.run(main_batch_run())
+
+
+    
+

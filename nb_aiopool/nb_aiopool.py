@@ -102,6 +102,33 @@ class NbAioPool:
         return asyncio.run_coroutine_threadsafe(
             self.submit(coro, block=block, future=future), loop)
 
+    async def batch_submit(self,
+                           coros: List[Coroutine[Any, Any, T]],
+                           block: bool = True) -> List[asyncio.Future]:
+        """
+        批量提交任务，返回 Future 列表
+        :param coros: 协程对象列表
+        :param block: True 队列满等待，False 队列满立即抛异常
+        :return: Future 列表
+        """
+        futures = []
+        for coro in coros:
+            # 每个协程都创建独立的 future，不重用
+            fut = await self.submit(coro, block=block, future=None)
+            futures.append(fut)
+        return futures
+
+    async def batch_run(self,
+                        coros: List[Coroutine[Any, Any, T]],
+                        block: bool = True) -> List[T]:
+        """
+        批量提交任务，返回结果列表
+        :param coros: 协程对象列表
+        :param block: True 队列满等待，False 队列满立即抛异常
+        :return: 结果列表
+        """
+        futures = await self.batch_submit(coros, block=block)
+        return await asyncio.gather(*futures)
 
     async def shutdown(self, wait: bool = True):
         """

@@ -29,5 +29,5 @@ async def main():
 
 if __name__ == "__main__":
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(main()) 
+    loop.create_task(main())
     loop.run_forever()  # 切记不能少，不然就会导致程序提前退出，导致任务压根就没执行提前丢失。
