@@ -11,8 +11,11 @@ import asyncio
 import json
 import pickle
 import traceback
+
 from typing import Callable, Any, List, Optional
 from functools import wraps
+
+
 
 try:
     import redis.asyncio as aioredis
@@ -25,7 +28,9 @@ except ImportError:
         )
 
 from nb_aiopool.nb_aiopool import NbAioPool
+from nb_log import get_logger
 
+logger = get_logger(__name__)
 
 class AioTask:
     """异步任务包装器"""
@@ -104,7 +109,7 @@ class AioTask:
         }
         serialized = self._serialize(task_data)
         await redis.rpush(self.queue_name, serialized)
-        print(f"✅ 任务已提交到队列 {self.queue_name}: {self.func.__name__}({args}, {kwargs})")
+        logger.info(f"✅ 任务已提交到队列 {self.queue_name}: {self.func.__name__}({args}, {kwargs})")
     
     async def _execute_task(self, task_data: bytes) -> Any:
         """执行单个任务"""
@@ -114,13 +119,11 @@ class AioTask:
             kwargs = data.get('kwargs', {})
             
             result = await self.func(*args, **kwargs)
-            print(f"✅ 任务执行成功: {self.func.__name__}({args}, {kwargs}) -> {result}")
+            logger.info(f"✅ 任务执行成功: {self.func.__name__}({args}, {kwargs}) -> {result}")
             return result
         
         except Exception as e:
-            print(f"❌ 任务执行失败: {self.func.__name__}")
-            print(f"   错误: {e}")
-            traceback.print_exc()
+            logger.error(f"❌ 任务执行失败: {self.func.__name__}", exc_info=True)
             raise
     
     async def consume(self, timeout: int = 5) -> None:
@@ -130,7 +133,7 @@ class AioTask:
         :param timeout: 每次 blpop 的超时时间（秒）
         """
         if self._consuming:
-            print(f"⚠️  消费者已在运行: {self.queue_name}")
+            logger.warning(f"⚠️  消费者已在运行: {self.queue_name}")
             return
         
         self._consuming = True
@@ -142,7 +145,7 @@ class AioTask:
             max_queue_size=self.max_queue_size
         )
         
-        print(f"🚀 启动消费者: {self.queue_name} (并发数: {self.max_concurrency})")
+        logger.info(f"🚀 启动消费者: {self.queue_name} (并发数: {self.max_concurrency})")
         
         try:
             while self._consuming:
@@ -160,23 +163,21 @@ class AioTask:
                 await self._pool.submit(self._execute_task(task_data))
         
         except asyncio.CancelledError:
-            print(f"🛑 消费者被取消: {self.queue_name}")
+            logger.info(f"🛑 消费者被取消: {self.queue_name}")
         
         except Exception as e:
-            print(f"❌ 消费者异常退出: {self.queue_name}")
-            print(f"   错误: {e}")
-            traceback.print_exc()
+            logger.error(f"❌ 消费者异常退出: {self.queue_name}", exc_info=True)
         
         finally:
             # 清理资源
             if self._pool:
                 await self._pool.shutdown(wait=True)
-            print(f"🛑 消费者已停止: {self.queue_name}")
+            logger.info(f"🛑 消费者已停止: {self.queue_name}")
     
     async def stop(self) -> None:
         """停止消费者"""
         self._consuming = False
-        print(f"正在停止消费者: {self.queue_name}")
+        logger.info(f"正在停止消费者: {self.queue_name}")
     
     async def get_queue_size(self) -> int:
         """获取队列中待处理任务数量"""
@@ -187,7 +188,7 @@ class AioTask:
         """清空队列"""
         redis = await self._get_redis()
         await redis.delete(self.queue_name)
-        print(f"🗑️  队列已清空: {self.queue_name}")
+        logger.info(f"🗑️  队列已清空: {self.queue_name}")
     
     async def close(self) -> None:
         """关闭 Redis 连接"""
@@ -259,7 +260,7 @@ async def batch_consume(
     await batch_consume([my_task1, my_task2, my_task3])
     ```
     """
-    print(f"🚀 批量启动 {len(tasks)} 个消费者")
+    logger.info(f"🚀 批量启动 {len(tasks)} 个消费者")
     
     # 并发启动所有消费者
     await asyncio.gather(
@@ -271,6 +272,11 @@ async def batch_consume(
 # ==================== 示例代码 ====================
 
 if __name__ == "__main__":
+    # 配置日志格式
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
     
     @aio_task(queue_name="test_queue1", max_concurrency=10)
     async def add_task(x, y):

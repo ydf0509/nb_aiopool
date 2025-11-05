@@ -5,7 +5,7 @@ nb_aio_task 使用示例
 """
 
 import asyncio
-from nb_aiopool.contrib import aio_task, batch_consume
+from nb_aiopool.contrib.nb_aio_task import aio_task, batch_consume
 
 
 # ==================== 定义任务 ====================

@@ -21,7 +21,7 @@ pip install redis  # 或 pip install aioredis
 
 ```python
 import asyncio
-from nb_aiopool.contrib import aio_task, batch_consume
+from nb_aiopool.contrib.nb_aio_task import aio_task, batch_consume
 
 @aio_task(queue_name="my_queue1", max_concurrency=100)
 async def my_fun1(x, y):

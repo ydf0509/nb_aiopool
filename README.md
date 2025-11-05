@@ -890,6 +890,7 @@ https://github.com/ydf0509/funboost/blob/master/funboost/concurrent_pool/async_p
 - `nb_aio_task`  使用例子
 ```python
 
+
 import asyncio
 from nb_aiopool.contrib import aio_task, batch_consume
 
@@ -897,6 +898,8 @@ from nb_aiopool.contrib import aio_task, batch_consume
 async def my_fun1(x, y):
     await asyncio.sleep(1)
     print(f"my_fun1: {x}, {y}")
+    for i in range(5): # 消费函数可以继续向其他队列中发消息
+        await my_fun2.submit(a=x*3 + i)
     return x + y
 
 @aio_task(queue_name="my_queue2", max_concurrency=50)
@@ -909,8 +912,7 @@ async def producer():
     # 提交任务到 Redis 队列
     await my_fun1.submit(1, 2)
     await my_fun1.submit(10, 20)
-    await my_fun2.submit(3)
-    
+    await my_fun1.submit(100, 200)
     # 查看队列大小
     print(f"队列大小: {await my_fun1.get_queue_size()}")
 
@@ -930,7 +932,7 @@ async def consumer():
 async def main():
     # 任然可以直接运行函数，但不会进入队列
     print(f"直接运行函数: {await my_fun1(1,2)}")
-    
+
     # 提交任务
     for i in range(100):
         await my_fun1.submit(i, i+1)
