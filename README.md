@@ -1,7 +1,7 @@
 # nb_aiopool - asyncio 协程并发池
 
-`nb_aiopool` 是一个轻量级、高性能的 `asyncio` 协程并发池，专为异步编程场景设计。
-`nb_aiopool` 附赠一套分布式asyncio异步任务队列框架 `nb_aio_task` ，用来演示如何使用 `nb_aiopool` 实现`asyncio`生态的分布式异步任务队列框架，
+- `nb_aiopool` 是一个轻量级、高性能的 `asyncio` 协程并发池，专为异步编程场景设计。  
+- `nb_aiopool` 附赠一套分布式asyncio异步任务队列框架 `nb_aio_task` ，用来演示如何使用 `nb_aiopool` 实现`asyncio`生态的分布式异步任务队列框架，
 
 **核心价值：**
 - ✅ **背压控制**：防止瞬间创建海量 Task，避免内存和 CPU 失控
@@ -892,7 +892,7 @@ https://github.com/ydf0509/funboost/blob/master/funboost/concurrent_pool/async_p
 
 
 import asyncio
-from nb_aiopool.contrib import aio_task, batch_consume
+from nb_aiopool.contrib.nb_aio_task import aio_task, batch_consume
 
 @aio_task(queue_name="my_queue1", max_concurrency=100)
 async def my_fun1(x, y):

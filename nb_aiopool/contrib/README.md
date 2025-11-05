@@ -123,7 +123,7 @@ await my_task.close()
 ### 批量启动消费者
 
 ```python
-from nb_aiopool.contrib import batch_consume
+from nb_aiopool.contrib.nb_aio_task import batch_consume
 
 # 同时启动多个任务的消费者
 await batch_consume([task1, task2, task3], timeout=5)
@@ -152,7 +152,7 @@ await process_data.submit({
 **生产者进程（producer.py）：**
 ```python
 import asyncio
-from nb_aiopool.contrib import aio_task
+from nb_aiopool.contrib.nb_aio_task import aio_task
 
 @aio_task(queue_name="tasks", max_concurrency=50)
 async def my_task(x):
@@ -170,7 +170,7 @@ asyncio.run(main())
 **消费者进程（consumer.py）：**
 ```python
 import asyncio
-from nb_aiopool.contrib import aio_task
+from nb_aiopool.contrib.nb_aio_task import aio_task
 
 @aio_task(queue_name="tasks", max_concurrency=50)
 async def my_task(x):
