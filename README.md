@@ -886,6 +886,8 @@ https://github.com/ydf0509/funboost/blob/master/funboost/concurrent_pool/async_p
 - `funboost` + 支持所有并发模式(包括asyncio) 是更强力的万能函数调度框架，`nb_aio_task` 是用来演示如何使用 `nb_aiopool` 实现`asyncio`生态的分布式异步任务队列框架，
   证明`nb_aiopool` 是可以作为任何`asyncio`生态框架的基石存在。
 
+- `nb_aio_task` 的asyncio 比 funboost 的asyncio 更纯粹,天然更容易自动使用用户的 `loop`, 因为 nb_aio_task 是在主线程运行的，自动和用户自己其他asyncio的代码 共享一个loop。
+    `funboost` 是子线程启动消费的，不是自动和用户的主线程共用一个loop,使用上要指定 `specify_async_loop`， 对不懂loop是什么的pythoner来说略难。
 
 - `nb_aio_task`  使用例子
 ```python
